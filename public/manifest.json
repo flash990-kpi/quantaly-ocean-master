@@ -1,0 +1,25 @@
+{
+  "name": "Quantaly EdTech - L'Architettura dell'Apprendimento Adattivo",
+  "short_name": "Quantaly",
+  "description": "Ecosistema EdTech Enterprise Zero-Trust con Micro-Learning Feed e Learn-to-Earn",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050710",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "/unnamed_edited (1).png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/unnamed_edited (1).png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Quantaly user profile schema",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 2048 },
+        "status": { "type": "string", "maxLength": 200 },
+        "birthDate": { "type": "string", "maxLength": 20 },
+        "country": { "type": "string", "maxLength": 50 },
+        "language": { "type": "string", "maxLength": 50 },
+        "displayAge": { "type": "number" },
+        "bio": { "type": "string", "maxLength": 1000 },
+        "qntTokens": { "type": "number" },
+        "level": { "type": "number" }
+      },
+      "required": ["displayName", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account documents stored by user UID"
+    }
+  }
+}

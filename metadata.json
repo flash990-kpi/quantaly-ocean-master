@@ -1,0 +1,8 @@
+{
+  "name": "Quantaly",
+  "description": "Quantaly KPI & Financial Intelligence Platform with real-time analytics, portfolio modeling, and Firebase auth integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
