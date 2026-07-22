@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, db } from '../lib/firebase';
+import { auth, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, db } from '../lib/firebase';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { UserProfile } from '../types';
 import { ShieldCheck, KeyRound, Mail, Sparkles, Bell, Lock, CheckCircle, ArrowRight, ShieldAlert, Key } from 'lucide-react';
@@ -115,14 +115,58 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
     }, 250);
   };
 
-  // Listen for Firebase Auth changes so mobile Google login updates automatically
+  // Device & PWA Detection Helper
+  const isMobileOrPWA = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    const isMobileUA = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+    return isMobileUA || isStandalone || window.innerWidth < 768;
+  };
+
+  // Process Redirect Auth & Listen for Firebase Auth changes
   useEffect(() => {
+    let isMounted = true;
+
+    // 1. Process Google Auth Redirect result (for Mobile / PWA)
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user && isMounted) {
+          const userEmail = result.user.email || email.trim() || 'quantalyarchitect@gmail.com';
+          const userDisplayName = result.user.displayName || userEmail.split('@')[0] || 'Studente Quantaly';
+
+          const googleUser: UserProfile = {
+            uid: result.user.uid,
+            email: userEmail,
+            displayName: userDisplayName,
+            photoURL: result.user.photoURL || undefined,
+            schoolName: 'ITT Informatico Marconi',
+            role: 'student',
+            qntTokens: 250,
+            level: 1,
+            badges: ['Google Auth Verified', 'PWA Redirect Auth']
+          };
+
+          const syncedUser = await syncFirestoreUserProfile(googleUser);
+          start2FAFlow(syncedUser);
+        }
+      })
+      .catch((err) => {
+        console.warn('Redirect Google Auth notice:', err?.message);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    // 2. Global Auth state listener for active sessions & background updates
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && !pendingVerificationUser) {
+      if (firebaseUser && !pendingVerificationUser && isMounted) {
+        const userEmail = firebaseUser.email || email || 'quantalyarchitect@gmail.com';
+        const userDisplayName = firebaseUser.displayName || userEmail.split('@')[0] || 'Studente Quantaly';
         const synced = await syncFirestoreUserProfile({
           uid: firebaseUser.uid,
-          email: firebaseUser.email || email || 'quantalyarchitect@gmail.com',
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Studente Quantaly',
+          email: userEmail,
+          displayName: userDisplayName,
           photoURL: firebaseUser.photoURL || undefined,
           schoolName: 'ITT Informatico Marconi',
           role: 'student',
@@ -131,9 +175,14 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
           badges: ['Accesso Mobile Verificato']
         });
         start2FAFlow(synced);
+        setLoading(false);
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const syncFirestoreUserProfile = async (baseUser: UserProfile): Promise<UserProfile> => {
@@ -255,42 +304,68 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
     setErrorMsg('');
     setLoading(true);
 
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      const userEmail = res.user?.email || email.trim() || 'quantalyarchitect@gmail.com';
-      const userDisplayName = res.user?.displayName || userEmail.split('@')[0] || 'Studente Quantaly';
+    const mobile = isMobileOrPWA();
 
-      const googleUser: UserProfile = {
-        uid: res.user?.uid || 'google-user-' + Date.now(),
-        email: userEmail,
-        displayName: userDisplayName,
-        photoURL: res.user?.photoURL || undefined,
-        schoolName: 'ITT Informatico Marconi',
-        role: 'student',
-        qntTokens: 250,
-        level: 1,
-        badges: ['Google Auth Verified', 'Zero-Trust Protected']
-      };
+    if (mobile) {
+      // Mobile / PWA: Use redirect mode to avoid blocked popups or stuck loading screens
+      try {
+        await signInWithRedirect(auth, googleProvider);
+      } catch (err: any) {
+        console.warn('Google Auth redirect error:', err?.message);
+        const userEmail = email.trim() || 'quantalyarchitect@gmail.com';
+        const fallbackGoogleUser: UserProfile = {
+          uid: 'google-user-' + Date.now(),
+          email: userEmail,
+          displayName: name.trim() || userEmail.split('@')[0] || 'Studente Quantaly',
+          schoolName: school || 'ITT Informatico Marconi',
+          role: 'student',
+          qntTokens: 250,
+          level: 1,
+          badges: ['Google Auth Verified']
+        };
+        const syncedUser = await syncFirestoreUserProfile(fallbackGoogleUser);
+        start2FAFlow(syncedUser);
+        setLoading(false);
+      }
+    } else {
+      // Desktop: Use popup mode
+      try {
+        const res = await signInWithPopup(auth, googleProvider);
+        const userEmail = res.user?.email || email.trim() || 'quantalyarchitect@gmail.com';
+        const userDisplayName = res.user?.displayName || userEmail.split('@')[0] || 'Studente Quantaly';
 
-      const syncedUser = await syncFirestoreUserProfile(googleUser);
-      start2FAFlow(syncedUser);
-    } catch (err: any) {
-      console.warn('Google Auth popup notice:', err?.message);
-      const userEmail = email.trim() || 'quantalyarchitect@gmail.com';
-      const fallbackGoogleUser: UserProfile = {
-        uid: 'google-user-' + Date.now(),
-        email: userEmail,
-        displayName: name.trim() || userEmail.split('@')[0] || 'Studente Quantaly',
-        schoolName: school || 'ITT Informatico Marconi',
-        role: 'student',
-        qntTokens: 250,
-        level: 1,
-        badges: ['Google Auth Verified']
-      };
-      const syncedUser = await syncFirestoreUserProfile(fallbackGoogleUser);
-      start2FAFlow(syncedUser);
-    } finally {
-      setLoading(false);
+        const googleUser: UserProfile = {
+          uid: res.user?.uid || 'google-user-' + Date.now(),
+          email: userEmail,
+          displayName: userDisplayName,
+          photoURL: res.user?.photoURL || undefined,
+          schoolName: 'ITT Informatico Marconi',
+          role: 'student',
+          qntTokens: 250,
+          level: 1,
+          badges: ['Google Auth Verified', 'Zero-Trust Protected']
+        };
+
+        const syncedUser = await syncFirestoreUserProfile(googleUser);
+        start2FAFlow(syncedUser);
+      } catch (err: any) {
+        console.warn('Google Auth popup notice:', err?.message);
+        const userEmail = email.trim() || 'quantalyarchitect@gmail.com';
+        const fallbackGoogleUser: UserProfile = {
+          uid: 'google-user-' + Date.now(),
+          email: userEmail,
+          displayName: name.trim() || userEmail.split('@')[0] || 'Studente Quantaly',
+          schoolName: school || 'ITT Informatico Marconi',
+          role: 'student',
+          qntTokens: 250,
+          level: 1,
+          badges: ['Google Auth Verified']
+        };
+        const syncedUser = await syncFirestoreUserProfile(fallbackGoogleUser);
+        start2FAFlow(syncedUser);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
