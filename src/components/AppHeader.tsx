@@ -81,7 +81,10 @@ export default function AppHeader({
   };
 
   return (
-    <header className="sticky top-0 left-0 right-0 z-50 w-full bg-[#050710]/90 backdrop-blur-xl border-b border-cyan-500/20 shadow-lg shadow-black/50 px-3 sm:px-6 py-2.5 transition-all">
+    <header
+      className="sticky top-0 left-0 right-0 z-50 w-full bg-[#050710]/95 backdrop-blur-xl border-b border-cyan-500/20 shadow-lg shadow-black/60 px-3 sm:px-6 pb-2.5 transition-all"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
+    >
       <div className="max-w-7xl mx-auto flex flex-col gap-2">
         
         {/* Main Row: Logo, Mobile Controls, Desktop Navigation & Controls */}

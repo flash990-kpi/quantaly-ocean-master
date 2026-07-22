@@ -121,8 +121,8 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
       if (firebaseUser && !pendingVerificationUser) {
         const synced = await syncFirestoreUserProfile({
           uid: firebaseUser.uid,
-          email: firebaseUser.email || 'google.user@quantaly.edu',
-          displayName: firebaseUser.displayName || 'Studente Quantaly',
+          email: firebaseUser.email || email || 'quantalyarchitect@gmail.com',
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Studente Quantaly',
           photoURL: firebaseUser.photoURL || undefined,
           schoolName: 'ITT Informatico Marconi',
           role: 'student',
@@ -152,6 +152,7 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
         return {
           ...baseUser,
           uid: existingDoc.id,
+          email: sanitizedEmail,
           displayName: data.displayName || baseUser.displayName,
           photoURL: data.photoURL || baseUser.photoURL,
           status: data.status || baseUser.status,
@@ -254,34 +255,38 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
     setErrorMsg('');
     setLoading(true);
 
-    const createGoogleUser = (resUser?: any): UserProfile => {
-      return {
-        uid: resUser?.uid || 'google-user-' + Date.now(),
-        email: resUser?.email || 'google.user@quantaly.edu',
-        displayName: resUser?.displayName || 'Studente Google',
-        photoURL: resUser?.photoURL || undefined,
+    try {
+      const res = await signInWithPopup(auth, googleProvider);
+      const userEmail = res.user?.email || email.trim() || 'quantalyarchitect@gmail.com';
+      const userDisplayName = res.user?.displayName || userEmail.split('@')[0] || 'Studente Quantaly';
+
+      const googleUser: UserProfile = {
+        uid: res.user?.uid || 'google-user-' + Date.now(),
+        email: userEmail,
+        displayName: userDisplayName,
+        photoURL: res.user?.photoURL || undefined,
         schoolName: 'ITT Informatico Marconi',
         role: 'student',
         qntTokens: 250,
         level: 1,
         badges: ['Google Auth Verified', 'Zero-Trust Protected']
       };
-    };
 
-    try {
-      const popupPromise = signInWithPopup(auth, googleProvider);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Popup timeout')), 1000)
-      );
-
-      const res: any = await Promise.race([popupPromise, timeoutPromise]).catch(() => null);
-
-      const baseUser = createGoogleUser(res?.user);
-      const syncedUser = await syncFirestoreUserProfile(baseUser);
+      const syncedUser = await syncFirestoreUserProfile(googleUser);
       start2FAFlow(syncedUser);
     } catch (err: any) {
       console.warn('Google Auth popup notice:', err?.message);
-      const fallbackGoogleUser = createGoogleUser();
+      const userEmail = email.trim() || 'quantalyarchitect@gmail.com';
+      const fallbackGoogleUser: UserProfile = {
+        uid: 'google-user-' + Date.now(),
+        email: userEmail,
+        displayName: name.trim() || userEmail.split('@')[0] || 'Studente Quantaly',
+        schoolName: school || 'ITT Informatico Marconi',
+        role: 'student',
+        qntTokens: 250,
+        level: 1,
+        badges: ['Google Auth Verified']
+      };
       const syncedUser = await syncFirestoreUserProfile(fallbackGoogleUser);
       start2FAFlow(syncedUser);
     } finally {
