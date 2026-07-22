@@ -81,7 +81,7 @@ export default function AppHeader({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-[#050710] border-b border-slate-800 px-3 sm:px-6 py-2.5">
+    <header className="sticky top-0 left-0 right-0 z-50 w-full bg-[#050710]/90 backdrop-blur-xl border-b border-cyan-500/20 shadow-lg shadow-black/50 px-3 sm:px-6 py-2.5 transition-all">
       <div className="max-w-7xl mx-auto flex flex-col gap-2">
         
         {/* Main Row: Logo, Mobile Controls, Desktop Navigation & Controls */}

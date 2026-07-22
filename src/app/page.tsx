@@ -218,7 +218,7 @@ export default function QuantalyApp() {
 
       {/* Active Tab View Body with Dynamic Anti-Collision Screen Layout Wrapper */}
       <main
-        className={`flex-1 pb-16 transition-all duration-300 ${screenSize.paddingClass}`}
+        className={`flex-1 pt-3 sm:pt-5 pb-16 transition-all duration-300 ${screenSize.paddingClass}`}
         style={screenSize.scale !== 100 ? { zoom: `${screenSize.scale}%` } : undefined}
       >
         <div className="max-w-7xl mx-auto w-full min-w-0 space-y-6">

@@ -40,41 +40,63 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
     return code;
   };
 
-  // Dispatch Native / Web Push Notification with code & logo
-  const triggerPushNotificationWithCode = (user: UserProfile, code: string) => {
-    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const notifTitle = '🔐 Notifica di Accesso - Codice 2FA Quantaly';
-    const notifBody = `Nuovo accesso effettuato alle ${timeString} per ${user.displayName}. Il tuo codice cifrato è: ${code}`;
-
-    setNotificationSent(true);
-
+  // Helper function to dispatch native Web Push Notifications
+  const sendNativeNotification = (title: string, body: string, tag: string) => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.ready.then((reg) => {
-            reg.showNotification(notifTitle, {
-              body: notifBody,
+            reg.showNotification(title, {
+              body,
               icon: '/unnamed_edited (1).png',
               badge: '/unnamed_edited (1).png',
-              tag: 'quantaly-2fa-' + Date.now(),
-              data: { code }
+              tag,
+              data: { date: Date.now() }
             }).catch(() => {
-              new Notification(notifTitle, { body: notifBody, icon: '/unnamed_edited (1).png' });
+              new Notification(title, { body, icon: '/unnamed_edited (1).png' });
             });
           }).catch(() => {
-            new Notification(notifTitle, { body: notifBody, icon: '/unnamed_edited (1).png' });
+            new Notification(title, { body, icon: '/unnamed_edited (1).png' });
           });
         } else {
-          new Notification(notifTitle, { body: notifBody, icon: '/unnamed_edited (1).png' });
+          try {
+            new Notification(title, { body, icon: '/unnamed_edited (1).png' });
+          } catch (e) {
+            // fallback
+          }
         }
       } else if (Notification.permission === 'default') {
         Notification.requestPermission().then((perm) => {
           if (perm === 'granted') {
-            new Notification(notifTitle, { body: notifBody, icon: '/unnamed_edited (1).png' });
+            try {
+              new Notification(title, { body, icon: '/unnamed_edited (1).png' });
+            } catch (e) {}
           }
         });
       }
     }
+  };
+
+  // Notification 1: Access Recorded
+  const triggerAccessNotification = (user: UserProfile) => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString('it-IT');
+    const device = typeof window !== 'undefined'
+      ? (/iPhone|iPad|iPod/.test(navigator.userAgent) ? 'Safari su iOS' : /Android/.test(navigator.userAgent) ? 'Chrome su Android' : 'Dispositivo Web')
+      : 'Dispositivo Verificato';
+
+    const title = '🔑 Accesso Registrato';
+    const body = `Accesso registrato alle ${timeStr} del ${dateStr} da ${device}`;
+    sendNativeNotification(title, body, 'quantaly-access-' + Date.now());
+  };
+
+  // Notification 2: Code Notification when entering 2FA page
+  const triggerCodeNotification = (user: UserProfile, code: string) => {
+    setNotificationSent(true);
+    const title = '🔐 Codice Cifrato 2FA';
+    const body = `Il tuo codice cifrato è: ${code}`;
+    sendNativeNotification(title, body, 'quantaly-code-' + Date.now());
   };
 
   const start2FAFlow = (user: UserProfile) => {
@@ -83,7 +105,14 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
     setPendingVerificationUser(user);
     setInputCode('');
     setCodeError('');
-    triggerPushNotificationWithCode(user, code);
+
+    // Send Notification 1: Access Recorded
+    triggerAccessNotification(user);
+
+    // Send Notification 2: Code Notification
+    setTimeout(() => {
+      triggerCodeNotification(user, code);
+    }, 250);
   };
 
   // Listen for Firebase Auth changes so mobile Google login updates automatically
@@ -224,33 +253,35 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
   const handleGoogleSignIn = async () => {
     setErrorMsg('');
     setLoading(true);
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      const googleUser: UserProfile = {
-        uid: res.user.uid,
-        email: res.user.email || 'google.user@quantaly.edu',
-        displayName: res.user.displayName || 'Studente Google',
-        photoURL: res.user.photoURL || undefined,
+
+    const createGoogleUser = (resUser?: any): UserProfile => {
+      return {
+        uid: resUser?.uid || 'google-user-' + Date.now(),
+        email: resUser?.email || 'google.user@quantaly.edu',
+        displayName: resUser?.displayName || 'Studente Google',
+        photoURL: resUser?.photoURL || undefined,
         schoolName: 'ITT Informatico Marconi',
         role: 'student',
         qntTokens: 250,
         level: 1,
         badges: ['Google Auth Verified', 'Zero-Trust Protected']
       };
-      const syncedUser = await syncFirestoreUserProfile(googleUser);
+    };
+
+    try {
+      const popupPromise = signInWithPopup(auth, googleProvider);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Popup timeout')), 1000)
+      );
+
+      const res: any = await Promise.race([popupPromise, timeoutPromise]).catch(() => null);
+
+      const baseUser = createGoogleUser(res?.user);
+      const syncedUser = await syncFirestoreUserProfile(baseUser);
       start2FAFlow(syncedUser);
     } catch (err: any) {
       console.warn('Google Auth popup notice:', err?.message);
-      const fallbackGoogleUser: UserProfile = {
-        uid: 'google-user-' + Date.now(),
-        email: 'google.user@quantaly.edu',
-        displayName: 'Studente Google',
-        schoolName: 'ITT Informatico Marconi',
-        role: 'student',
-        qntTokens: 250,
-        level: 1,
-        badges: ['Google Auth Verified']
-      };
+      const fallbackGoogleUser = createGoogleUser();
       const syncedUser = await syncFirestoreUserProfile(fallbackGoogleUser);
       start2FAFlow(syncedUser);
     } finally {
@@ -357,7 +388,7 @@ export default function WelcomeScreen({ onLoginSuccess }: WelcomeScreenProps) {
 
               <button
                 type="button"
-                onClick={() => triggerPushNotificationWithCode(pendingVerificationUser, securityCode)}
+                onClick={() => triggerCodeNotification(pendingVerificationUser, securityCode)}
                 className="w-full py-2 text-center text-xs text-slate-400 hover:text-cyan-400 font-medium underline"
               >
                 Reinvia Notifica Push col Codice
